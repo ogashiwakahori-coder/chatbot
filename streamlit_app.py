@@ -8,50 +8,43 @@ st.write(
     "To use this app, you need to provide a Gemini API key, which you can get [here](https://aistudio.google.com/app/apikey). "
 )
 
-# Ask user for their Gemini API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`
 gemini_api_key = st.text_input("Gemini API Key", type="password")
 if not gemini_api_key:
     st.info("Please add your Gemini API key to continue.", icon="🗝️")
 else:
-    # Configure the Gemini client.
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.5-pro")##
+    model = genai.GenerativeModel("gemini-2.5-pro")
 
-    # Create a session state variable to store the chat messages.
+    # チャット履歴をセッションに保存
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "chat" not in st.session_state:
+        st.session_state.chat = model.start_chat(history=[])
 
-    # Display the existing chat messages via `st.chat_message`.
+    # 既存メッセージを表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Create a chat input field to allow the user to enter a message.
+    # 入力欄
     if prompt := st.chat_input("What is up?"):
-        # Store and display the current prompt.
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Prepare history for Gemini (system, user, assistant).
-        history = []
-        for m in st.session_state.messages:
-            if m["role"] == "user":
-                history.append({"role": "user", "parts": [m["content"]]})
-            elif m["role"] == "assistant":
-                history.append({"role": "model", "parts": [m["content"]]})
-
-        # Generate a response using Gemini API.
-        response = model.generate_content(
+        # Geminiでレスポンス生成（stream=Trueでストリーム）
+        response_stream = st.session_state.chat.send_message(
             prompt,
-            generation_config={"max_output_tokens": 1024},
             stream=True,
-            history=history if history else None,
+            generation_config={"max_output_tokens": 1024}
         )
 
-        # Stream response and store it in session state.
+        # ストリームを表示し、出力をすべて連結して保存
+        full_response = ""
+        with st.chat_message("assistant"):
+            for chunk in st.write_stream(response_stream):
+                full_response += chunk
+        st.session_state.messages.append({"role": "assistant", "content": full_response})n session state.
         with st.chat_message("assistant"):
             output = st.write_stream(response)
         st.session_state.messages.append({"role": "assistant", "content": output})
